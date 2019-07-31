@@ -18,6 +18,7 @@ kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper lo
 
 MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-input-messages.txt"
 
+echo "Creating Input Message file."
 for i in {0..9}
 do
   MESSAGE=`uuidgen`
@@ -46,5 +47,5 @@ kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper lo
 NUM_LINES=`wc -l < ${MESSAGE_INPUT_FILE}`
 echo $NUM_LINES
 
-NUM_LINES_MATCH=`grep -w "SSXVNJHPDQDXVCRASTVYBCWVMGNYKRXVZXKGXTSPSJDGYLUEGQFLAQLOCFLJBEPOWFNSOMYARHAOPUFOJHHDXEHXJBHWGSMZJGNL" -c ${OUTPUT_FILE}`
+NUM_LINES_MATCH=`grep -w "SSXVNJHPDQDXVCRASTVYBCWVMGNYKRXVZXKGXTSPSJDGYLUEGQFLAQLOCFLJBEPOWFNSOMYARHAOPUFOJHHDXEHXJBHWGSMZJGNL" -c ${MESSAGE_INPUT_FILE}`
 echo $NUM_LINES_MATCH
