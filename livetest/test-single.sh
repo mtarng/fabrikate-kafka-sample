@@ -11,9 +11,18 @@ kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper lo
 
 
 
-# Create messages
-kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic $TESTING_TOPIC --num-records 10 --record-size 100 --throughput 1 --producer-props acks=1 bootstrap.servers=kcluster-kafka-brokers:9092 buffer.memory=1000000 batch.size=8196
+# Create messages via perf test producer
+# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic $TESTING_TOPIC --num-records 10 --record-size 100 --throughput 1 --producer-props acks=1 bootstrap.servers=kcluster-kafka-brokers:9092 buffer.memory=1000000 batch.size=8196
 
+# Create messages via console producer - lol
+
+kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-producer.sh --broker-list kcluster-kafka-brokers:9092 --topic $TESTING_TOPIC < test-input.txt
+
+PRODUCER_PID=$!
+
+sleep 10
+
+kill $PRODUCER_PID
 
 # Consume messages from topic
 OUTPUT_FILE="consumer-msg.txt"
@@ -22,7 +31,7 @@ kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --boots
 
 CONSUMER_PID=$!
 
-sleep 15
+sleep 10
 
 kill $CONSUMER_PID
 

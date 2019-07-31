@@ -4,7 +4,7 @@ metadata:
   name: livetest-topic-1
   namespace: kafka
   labels:
-    strimzi.io/cl∑uster: kcluster
+    strimzi.io/cluster: kcluster
 spec:
   partitions: 6
   replicas: 3

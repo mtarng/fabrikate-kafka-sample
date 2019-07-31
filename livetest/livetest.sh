@@ -10,6 +10,13 @@ if [ -z "$ZOOKEEPER_NAME" ]; then
   ZOOKEEPER_NAME="kcluster-zookeeper-client.kafka:2181"
 fi
 
+# TODO: figure out if we can deploy client without topic and users first?
+kubectl apply -n kafka -f kafka-topics.yaml
+kubectl apply -n kafka -f kafka-users.yaml
+kubectl apply -n kafka -f kafka-client.yaml
+
+sleep 5s
+
 # Create kafka topic
 TESTING_TOPIC="livetest-topic"
 # Option 1 - Deploy via CRD
