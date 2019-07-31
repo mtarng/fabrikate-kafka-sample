@@ -6,7 +6,7 @@ echo $UUID
 TESTING_TOPIC="livetest-topic-${UUID}"
 echo "Test Topic: ${TESTING_TOPIC}"
 
-MESSAGE_INPUT_FILE="${TESTING_TOPIC}-input-messages.txt"
+MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-input-messages.txt"
 
 for i in {0..9}
 do

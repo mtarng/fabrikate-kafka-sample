@@ -16,12 +16,12 @@ kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper lo
 
 # TODO: Create input file from generated UUIDs and use those as messages. Capture in a list. Will compare conents at end.
 
-MESSAGE_INPUT_FILE="${TESTING_TOPIC}-input-messages.txt"
+MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-input-messages.txt"
 
 for i in {0..9}
 do
   MESSAGE=`uuidgen`
-  echo "Message: ${MESSAGE}"
+  # echo "Message: ${MESSAGE}"
   echo "${MESSAGE}" >> $MESSAGE_INPUT_FILE
 done
 
@@ -31,7 +31,7 @@ cat $MESSAGE_INPUT_FILE
 kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-producer.sh --broker-list kcluster-kafka-brokers:9092 --topic $TESTING_TOPIC < $MESSAGE_INPUT_FILE
 
 # Consume messages from topic
-MESSAGE_INPUT_FILE="${TESTING_TOPIC}-output-messages.txt"
+MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-output-messages.txt"
 # kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning 2>&1 | tee $MESSAGE_INPUT_FILE.txt
 kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning > $MESSAGE_INPUT_FILE &
 
