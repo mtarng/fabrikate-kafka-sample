@@ -3,7 +3,7 @@
 UUID=`uuidgen | awk '{print tolower($0)}'`
 echo $UUID
 
-TESTING_TOPIC="livetest-topic-${UUID}"
+TESTING_TOPIC="topic-${UUID}"
 echo "Test Topic: ${TESTING_TOPIC}"
 
 # Option 2 - Deploy via kafka script - needs to connect through kcluster-kafka-0
@@ -28,24 +28,34 @@ done
 
 cat $MESSAGE_INPUT_FILE
 
-# Create messages via console producer - lol
+# Create messages via console producer
 kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-producer.sh --broker-list kcluster-kafka-brokers:9092 --topic $TESTING_TOPIC < $MESSAGE_INPUT_FILE
 
 # Consume messages from topic
-MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-output-messages.txt"
+MESSAGE_OUTPUT_FILE="./temp/${TESTING_TOPIC}-output-messages.txt"
+# TODO: Figure out how to swallow message "Unable to use a TTY - input is not a terminal or the right kind of file"
 # kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning 2>&1 | tee $MESSAGE_INPUT_FILE.txt
-kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning > $MESSAGE_INPUT_FILE &
+kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning > $MESSAGE_OUTPUT_FILE &
 
 CONSUMER_PID=$!
-
 sleep 10
-
 kill $CONSUMER_PID
 
+# Delete test topic
 kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic $TESTING_TOPIC
 
-NUM_LINES=`wc -l < ${MESSAGE_INPUT_FILE}`
-echo $NUM_LINES
+# Compare contents of input and output
+SORTED_INPUT="./temp/sorted-input.txt"
+SORTED_OUTPUT="./temp/sorted-output.txt"
+sort $MESSAGE_INPUT_FILE > $SORTED_INPUT
+sort $MESSAGE_OUTPUT_FILE > $SORTED_OUTPUT
 
-NUM_LINES_MATCH=`grep -w "SSXVNJHPDQDXVCRASTVYBCWVMGNYKRXVZXKGXTSPSJDGYLUEGQFLAQLOCFLJBEPOWFNSOMYARHAOPUFOJHHDXEHXJBHWGSMZJGNL" -c ${MESSAGE_INPUT_FILE}`
-echo $NUM_LINES_MATCH
+DIFF=`diff ${SORTED_INPUT} ${SORTED_OUTPUT}`
+if [ "$DIFF" != "" ] 
+then
+    echo "Test Failed!!! - There's a difference between input and output!!!"
+    exit 1
+fi
+
+echo "Test Passed!!! - All input messages are in the output!"
+exit 0
