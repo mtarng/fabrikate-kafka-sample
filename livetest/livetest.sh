@@ -1,35 +1,15 @@
 #! /usr/bin/env bash
 
-# Set correct values for your Kafka Cluster
-if [ -z "$KAFKA_BROKER_NAME" ]; then
-  # Switch if you don't want to use ssl.
-  KAFKA_BROKER_NAME="kcluster-kafka-brokers.kafka:9093"
-fi
-if [ -z "$ZOOKEEPER_NAME" ]; then
-  # This doesn't work - can't connect directly to zookeeper (Strimzi Operator Feature)
-  ZOOKEEPER_NAME="kcluster-zookeeper-client.kafka:2181"
-fi
+# TODO: Env vars for argument and configured values for the Kafka Cluster
 
+# Deploy kafka client to use as producer and consumer
 # TODO: figure out if we can deploy client without topic and users first?
 kubectl apply -n kafka -f kafka-topics.yaml
 kubectl apply -n kafka -f kafka-users.yaml
 kubectl apply -n kafka -f kafka-client.yaml
-
 sleep 5s
 
-# Create kafka topic
-TESTING_TOPIC="livetest-topic"
-# Option 1 - Deploy via CRD
-kubectl apply -n kafka -f kafka-topics.yaml
-
-# Option 2 - Deploy via kafka script
-kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic $TESTING_TOPIC --partitions 3 --replication-factor 2
-
-# Get All Topics in Kafka
-# kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --list --zookeeper localhost:2181
-
-sleep 5s
-
+# Kafka client SSL Components
 setup_kafka_client_ssl () {
   echo "Setting Up Kafka Client for SSL"
   for i in $(seq 0 2); do # End Number is replication factor of kafka client - 1
@@ -38,51 +18,62 @@ setup_kafka_client_ssl () {
   done
 }
 
+# TODO: argument or boolean for this
 # Comment following line if you don't want to use ssl.
-setup_kafka_client_ssl
+# setup_kafka_client_ssl
 
-echo "Single thread, no replication"
-kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh \
-  --topic test-one-rep --num-records $NUM_RECORDS --record-size $RECORD_SIZE \
-  --throughput $THROUGHPUT --producer-props \
-  acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196 \
-  --producer.config /opt/kafka/config/ssl-config.properties
+# Create kafka topic
+UUID=`uuidgen | awk '{print tolower($0)}'`
+echo $UUID
 
-exit 1
+TESTING_TOPIC="topic-${UUID}"
+echo "Test Topic: ${TESTING_TOPIC}"
 
-echo "Single-thread, async 3x replication"
-kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic test --num-records $NUM_RECORDS --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196
+# TODO: Deploy via CRD with kafka-topics.yaml
+# Deploy via kafka broker pod - Alternatively this can be done through the CRD.
+kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic $TESTING_TOPIC --partitions 3 --replication-factor 2
 
-echo "Single-thread, sync 3x replication"
-kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic test --num-records $NUM_RECORDS --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=-1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=64000
+# Create random test messages
+MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-input-messages.txt"
 
-echo "Three Producers, 3x async replication"
-kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic test --num-records $NUM_RECORDS --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196 && kubectl exec -it kafkaclient-1 -- bin/kafka-producer-perf-test.sh --topic test --num-records $NUM_RECORDS --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196 && kubectl exec -it kafkaclient-2 -- bin/kafka-producer-perf-test.sh --topic test --num-records $NUM_RECORDS --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196
+echo "Creating Input Message file."
+for i in {0..9}
+do
+  MESSAGE=`uuidgen`
+  # echo "Message: ${MESSAGE}"
+  echo "${MESSAGE}" >> $MESSAGE_INPUT_FILE
+done
 
-# Throughput Versus Stored Data - this is a long, memory intensive test. Uncomment and use with caution
-# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-topics.sh --zookeeper kafka-zookeeper:2181 --create --topic test-throughput --partitions 6 --replication-factor 3 
-# kubectl exec -n kafka -it kafkaclient-1 -- bin/kafka-producer-perf-test.sh --topic test-throughput --num-records 50000000000 --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196
+cat $MESSAGE_INPUT_FILE
 
-# Effect of message size
+# Create messages via console producer
+kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-producer.sh --broker-list kcluster-kafka-brokers:9092 --topic $TESTING_TOPIC < $MESSAGE_INPUT_FILE
 
-# for i in 10 100 1000 10000 100000;
-# do
-# echo ""
-# echo $i
-# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic test --num-records $((1000*1024*1024/$i)) --record-size $i --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=128000
-# done;
+# Consume messages from topic
+MESSAGE_OUTPUT_FILE="./temp/${TESTING_TOPIC}-output-messages.txt"
+# TODO: Figure out how to swallow message "Unable to use a TTY - input is not a terminal or the right kind of file"
+# kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning 2>&1 | tee $MESSAGE_OUTPUT_FILE.txt
+kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning > $MESSAGE_OUTPUT_FILE &
 
-# echo "Consumer throughput"
-# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-consumer-perf-test.sh --zookeeper $ZOOKEEPER_NAME --messages $NUM_RECORDS --topic test --threads 1
+CONSUMER_PID=$!
+sleep 10
+kill $CONSUMER_PID
 
-# echo "3 Consumers"
-# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-consumer-perf-test.sh --zookeeper $ZOOKEEPER_NAME --messages $NUM_RECORDS --topic test --threads 1 && kubectl exec -it kafkaclient-1 -- bin/kafka-consumer-perf-test.sh --zookeeper $ZOOKEEPER_NAME --messages $NUM_RECORDS --topic test --threads 1 && kubectl exec -it kafkaclient-2 -- bin/kafka-consumer-perf-test.sh --zookeeper $ZOOKEEPER_NAME --messages $NUM_RECORDS --topic test --threads 1
+# Delete test topic
+kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic $TESTING_TOPIC
 
-# End-to-end Latency - does not work, can't find class kafka.tools?
-# kubectl exec -n kafka -it kafkaclient -- bin/kafka-run-class.sh kafka.tools.TestEndToEndLatency esv4-hcl198.grid.linkedin.com:9092 esv4-hcl197.grid.linkedin.com:2181 test 5000
+# Compare contents of input and output
+SORTED_INPUT="./temp/sorted-input.txt"
+SORTED_OUTPUT="./temp/sorted-output.txt"
+sort $MESSAGE_INPUT_FILE > $SORTED_INPUT
+sort $MESSAGE_OUTPUT_FILE > $SORTED_OUTPUT
 
-# These do not currently work since you can't connect to zookeeper.
-# echo "Producer and Consumer"
-# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-topics.sh --zookeeper $ZOOKEEPER_NAME --create --topic test-producer-consumer --partitions 6 --replication-factor 3 
-# kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic test-producer-consumer --num-records $NUM_RECORDS --record-size $RECORD_SIZE --throughput $THROUGHPUT --producer-props acks=1 bootstrap.servers=$KAFKA_BROKER_NAME buffer.memory=$BUFFER_MEMORY batch.size=8196
-# kubectl exec -n kafka -it kafkaclient-1 -- bin/kafka-consumer-perf-test.sh --zookeeper $ZOOKEEPER_NAME --messages $NUM_RECORDS --topic test-producer-consumer --threads 1
+DIFF=`diff ${SORTED_INPUT} ${SORTED_OUTPUT}`
+if [ "$DIFF" != "" ] 
+then
+    echo "Test Failed!!! - There's a difference between input and output!!!"
+    exit 1
+fi
+
+echo "Test Passed!!! - All input messages are in the output!"
+exit 0
