@@ -31,7 +31,7 @@ echo "Test Topic: ${TESTING_TOPIC}"
 
 # TODO: Deploy via CRD with kafka-topics.yaml
 # Deploy via kafka broker pod - Alternatively this can be done through the CRD.
-kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic $TESTING_TOPIC --partitions 3 --replication-factor 2
+kubectl exec -n kafka -ti kcluster-kafka-0 --container kafka -- bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic $TESTING_TOPIC --partitions 3 --replication-factor 2
 
 # Create random test messages
 MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-input-messages.txt"
@@ -47,20 +47,36 @@ done
 cat $MESSAGE_INPUT_FILE
 
 # Create messages via console producer
-kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-producer.sh --broker-list kcluster-kafka-brokers:9092 --topic $TESTING_TOPIC < $MESSAGE_INPUT_FILE
+kubectl exec -n kafka -i kafkaclient-0 -- bin/kafka-console-producer.sh --broker-list kcluster-kafka-brokers:9092 --topic $TESTING_TOPIC < $MESSAGE_INPUT_FILE
 
 # Consume messages from topic
 MESSAGE_OUTPUT_FILE="./temp/${TESTING_TOPIC}-output-messages.txt"
 # TODO: Figure out how to swallow message "Unable to use a TTY - input is not a terminal or the right kind of file"
 # kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning 2>&1 | tee $MESSAGE_OUTPUT_FILE.txt
-kubectl exec -n kafka -ti kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning > $MESSAGE_OUTPUT_FILE &
+kubectl exec -n kafka -i kafkaclient-0 -- bin/kafka-console-consumer.sh --bootstrap-server kcluster-kafka-bootstrap:9092 --topic $TESTING_TOPIC --from-beginning > $MESSAGE_OUTPUT_FILE &
 
+# TODO: verify this also kills the process on kafka client. We cannot remove the topic until the consumer is gone.
 CONSUMER_PID=$!
 sleep 10
 kill $CONSUMER_PID
 
+echo "listing topics"
+kubectl exec -n kafka -ti kcluster-kafka-0 --container kafka -- bin/kafka-topics.sh --list --zookeeper localhost:2181
+
+# Remove client
+kubectl delete -n kafka -f kafka-topics.yaml
+kubectl delete -n kafka -f kafka-users.yaml
+kubectl delete -n kafka -f kafka-client.yaml
+
+sleep 60
+
 # Delete test topic
-kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic $TESTING_TOPIC
+echo "deleting test topic"
+echo "kubectl exec -n kafka -ti kcluster-kafka-0 --container kafka -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic ${TESTING_TOPIC}"
+kubectl exec -n kafka -ti kcluster-kafka-0 --container kafka -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic $TESTING_TOPIC
+
+echo "listing topics after deletion"
+kubectl exec -n kafka -ti kcluster-kafka-0 --container kafka -- bin/kafka-topics.sh --list --zookeeper localhost:2181
 
 # Compare contents of input and output
 SORTED_INPUT="./temp/sorted-input.txt"

@@ -37,9 +37,18 @@ CONSUMER_PID=$!
 sleep 10
 kill $CONSUMER_PID
 
+sleep 30
+
+echo "listing topics"
+kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --list --zookeeper localhost:2181
+
 # Delete test topic
+echo "deleting test topic"
+echo "kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic ${TESTING_TOPIC}"
 kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --delete --topic $TESTING_TOPIC
 
+echo "listing topics after deletion"
+kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --list --zookeeper localhost:2181
 # Compare contents of input and output
 SORTED_INPUT="./temp/sorted-input.txt"
 SORTED_OUTPUT="./temp/sorted-output.txt"
