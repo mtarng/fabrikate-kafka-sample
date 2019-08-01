@@ -9,12 +9,8 @@ echo "Test Topic: ${TESTING_TOPIC}"
 # Option 2 - Deploy via kafka script - needs to connect through kcluster-kafka-0
 kubectl exec -n kafka -ti kcluster-kafka-0 -- bin/kafka-topics.sh --zookeeper localhost:2181 --create --topic $TESTING_TOPIC --partitions 3 --replication-factor 2
 
-
-
 # Create messages via perf test producer
 # kubectl exec -n kafka -it kafkaclient-0 -- bin/kafka-producer-perf-test.sh --topic $TESTING_TOPIC --num-records 10 --record-size 100 --throughput 1 --producer-props acks=1 bootstrap.servers=kcluster-kafka-brokers:9092 buffer.memory=1000000 batch.size=8196
-
-# TODO: Create input file from generated UUIDs and use those as messages. Capture in a list. Will compare conents at end.
 
 MESSAGE_INPUT_FILE="./temp/${TESTING_TOPIC}-input-messages.txt"
 
